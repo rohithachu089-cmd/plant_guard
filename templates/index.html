@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plant Guard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #0b1220; color: #e8eef9; }
+    .card { background: #121a2b; border: 1px solid #1f2a44; }
+    .badge { font-size: 0.9rem; }
+    .prob-bar { height: 10px; border-radius: 4px; }
+    .prob-label { font-size: 0.9rem; }
+    .water { color: #6dd5ed; }
+    .spray { color: #ffb86c; }
+    .live { color: #7CFC00; }
+    .toggle-auto { min-width: 150px; }
+    img.stream { width: 100%; border-radius: 8px; border: 1px solid #1f2a44; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="m-0">🌿 Plant Guard</h2>
+    <div>
+      <span class="me-3 live">● LIVE</span>
+      <button id="btn-auto" class="btn btn-outline-info toggle-auto">Auto: {{ 'ON' if auto_enabled else 'OFF' }}</button>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Camera</span>
+          <small class="text-secondary">Streaming MJPEG</small>
+        </div>
+        <div class="card-body">
+          <img class="stream" src="/video_feed" alt="Live stream"/>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card mb-4">
+        <div class="card-header">Status</div>
+        <div class="card-body">
+          <div class="mb-2"><span class="water">Water Level:</span> <span id="water-level">{{ status.get('water_level', 0) }}%</span></div>
+          <div class="mb-2"><span class="spray">Pump1 (Powdery) Sprays:</span> <span id="pump1-count">{{ counts.get('pump1', 0) }}</span></div>
+          <div class="mb-2"><span class="spray">Pump2 (Rust) Sprays:</span> <span id="pump2-count">{{ counts.get('pump2', 0) }}</span></div>
+        </div>
+      </div>
+      <div class="card mb-4">
+        <div class="card-header">Prediction</div>
+        <div class="card-body">
+          <div class="mb-2"><strong>Label:</strong> <span id="pred-label">{{ last_prediction.get('label', '') }}</span></div>
+          <div id="probs">
+            {% for l in labels %}
+              <div class="d-flex align-items-center mb-1">
+                <div class="flex-grow-1">
+                  <div class="prob-label">{{ l }}</div>
+                  <div class="bg-secondary prob-bar">
+                    <div id="bar-{{ l }}" class="bg-info prob-bar" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="ms-2" id="val-{{ l }}">0%</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Manual Spray</div>
+        <div class="card-body d-grid gap-2">
+          <button class="btn btn-warning" onclick="spray(1)">Spray Motor 1 (Pump 1)</button>
+          <button class="btn btn-danger" onclick="spray(2)">Spray Motor 2 (Pump 2)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    document.getElementById('water-level').innerText = (data.water_level ?? 0) + '%';
+    document.getElementById('pump1-count').innerText = data.pump1_count ?? 0;
+    document.getElementById('pump2-count').innerText = data.pump2_count ?? 0;
+    document.getElementById('pred-label').innerText = data.last_prediction?.label || '';
+    const probs = data.last_prediction?.probs || {};
+    for (const [k,v] of Object.entries(probs)) {
+      const pct = Math.round(v*100);
+      const bar = document.getElementById('bar-'+k);
+      const val = document.getElementById('val-'+k);
+      if (bar) bar.style.width = pct + '%';
+      if (val) val.innerText = pct + '%';
+    }
+    // update auto button state
+    const btn = document.getElementById('btn-auto');
+    btn.textContent = 'Auto: ' + (data.auto_enabled ? 'ON' : 'OFF');
+    btn.className = 'btn ' + (data.auto_enabled ? 'btn-info' : 'btn-outline-info') + ' toggle-auto';
+  } catch(e) {
+    console.error(e);
+  }
+}
+setInterval(refreshStatus, 2000);
+refreshStatus();
+
+const btnAuto = document.getElementById('btn-auto');
+btnAuto.addEventListener('click', async ()=>{
+  try { await fetch('/api/toggle_auto', { method: 'POST' }); } catch(e) {}
+  refreshStatus();
+});
+
+async function spray(pump) {
+  try {
+    await fetch('/api/spray', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pump }) });
+    setTimeout(refreshStatus, 800);
+  } catch(e) { console.error(e); }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Core web framework
+Flask==3.0.3
+
+# Camera and image processing
+opencv-python==4.10.0.84
+numpy==1.26.4
+
+# HTTP client
+requests==2.32.3
+
+# Use tflite-runtime on Raspberry Pi for lightweight inference (preferred)
+# For Pi (aarch64/armv7), install one of:
+# pip install --extra-index-url https://google-coral.github.io/py-repo/ tflite-runtime==2.14.0
+# or comment above and use TensorFlow (heavier):
+# tensorflow==2.14.0
+
+# Training dependencies (if you want to train on the Pi; otherwise train on a PC)
+tensorflow==2.14.0
+tensorflow-datasets==4.9.4
+Pillow==10.4.0
+scikit-learn==1.5.1

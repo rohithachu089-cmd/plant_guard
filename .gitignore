@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+app.log
+diag.py
+dataset/
+models/*.tflite
+models/labels.txt
