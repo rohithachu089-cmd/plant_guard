@@ -24,7 +24,8 @@
     <h2 class="m-0">🌿 Plant Guard</h2>
     <div>
       <span class="me-3 live">● LIVE</span>
-      <button id="btn-auto" class="btn btn-outline-info toggle-auto">Auto: {{ 'ON' if auto_enabled else 'OFF' }}</button>
+      <button id="btn-scan" class="btn btn-outline-warning">Scan: OFF</button>
+      <button id="btn-auto" class="btn btn-outline-info toggle-auto">Auto Spray: {{ 'ON' if auto_enabled else 'OFF' }}</button>
     </div>
   </div>
 
@@ -45,6 +46,7 @@
         <div class="card-header">Status</div>
         <div class="card-body">
           <div class="mb-2"><span class="water">Water Level:</span> <span id="water-level">{{ status.get('water_level', 0) }}%</span></div>
+          <div class="mb-2"><span class="text-white">Bot Phase:</span> <span id="bot-phase" class="badge bg-secondary">stopped</span></div>
           <div class="mb-2"><span class="spray">Pump1 (Powdery) Sprays:</span> <span id="pump1-count">{{ counts.get('pump1', 0) }}</span></div>
           <div class="mb-2"><span class="spray">Pump2 (Rust) Sprays:</span> <span id="pump2-count">{{ counts.get('pump2', 0) }}</span></div>
         </div>
@@ -97,9 +99,21 @@ async function refreshStatus() {
       if (val) val.innerText = pct + '%';
     }
     // update auto button state
-    const btn = document.getElementById('btn-auto');
-    btn.textContent = 'Auto: ' + (data.auto_enabled ? 'ON' : 'OFF');
-    btn.className = 'btn ' + (data.auto_enabled ? 'btn-info' : 'btn-outline-info') + ' toggle-auto';
+    const btnAuto = document.getElementById('btn-auto');
+    btnAuto.textContent = 'Auto Spray: ' + (data.auto_enabled ? 'ON' : 'OFF');
+    btnAuto.className = 'btn ' + (data.auto_enabled ? 'btn-info' : 'btn-outline-info') + ' toggle-auto';
+    
+    // update scan button state
+    const btnScan = document.getElementById('btn-scan');
+    btnScan.textContent = 'Scan: ' + (data.scan_active ? 'ON' : 'OFF');
+    btnScan.className = 'btn ' + (data.scan_active ? 'btn-warning' : 'btn-outline-warning');
+    
+    // update bot phase
+    const phaseEl = document.getElementById('bot-phase');
+    phaseEl.innerText = data.bot_phase || 'stopped';
+    if (data.bot_phase === 'moving') phaseEl.className = 'badge bg-primary';
+    else if (data.bot_phase === 'scanning') phaseEl.className = 'badge bg-success';
+    else phaseEl.className = 'badge bg-secondary';
   } catch(e) {
     console.error(e);
   }
@@ -110,6 +124,12 @@ refreshStatus();
 const btnAuto = document.getElementById('btn-auto');
 btnAuto.addEventListener('click', async ()=>{
   try { await fetch('/api/toggle_auto', { method: 'POST' }); } catch(e) {}
+  refreshStatus();
+});
+
+const btnScan = document.getElementById('btn-scan');
+btnScan.addEventListener('click', async ()=>{
+  try { await fetch('/api/toggle_scan', { method: 'POST' }); } catch(e) {}
   refreshStatus();
 });
 

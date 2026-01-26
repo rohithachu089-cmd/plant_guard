@@ -37,14 +37,25 @@ def load_dataset(data_dir: str, image_size=(224, 224)):
 
 
 def build_model(num_classes: int, input_shape=(224, 224, 3)):
+    # Data Augmentation Layer
+    data_augmentation = tf.keras.Sequential([
+        layers.RandomFlip("horizontal_and_vertical"),
+        layers.RandomRotation(0.2),
+        layers.RandomZoom(0.2),
+        layers.RandomContrast(0.1),
+    ])
+
     base = tf.keras.applications.MobileNetV2(
         input_shape=input_shape, include_top=False, weights='imagenet')
     base.trainable = False  # freeze for initial training
+    
     inp = layers.Input(shape=input_shape)
-    x = base(inp, training=False)
+    x = data_augmentation(inp)
+    x = base(x, training=False)
     x = layers.GlobalAveragePooling2D()(x)
     x = layers.Dropout(0.2)(x)
     out = layers.Dense(num_classes, activation='softmax')(x)
+    
     model = models.Model(inp, out)
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),
                   loss='sparse_categorical_crossentropy',
@@ -54,10 +65,10 @@ def build_model(num_classes: int, input_shape=(224, 224, 3)):
 
 def fine_tune(model, base_lr=1e-4):
     # Unfreeze top layers for fine-tuning
-    base_model = model.layers[1]
+    base_model = model.get_layer('mobilenetv2_1.00_224') # specific layer name
     base_model.trainable = True
-    # fine-tune last N layers
-    for layer in base_model.layers[:-30]:
+    # fine-tune last 20 layers (shortcut: less layers for faster fine-tuning)
+    for layer in base_model.layers[:-20]:
         layer.trainable = False
     model.compile(optimizer=tf.keras.optimizers.Adam(base_lr),
                   loss='sparse_categorical_crossentropy',
@@ -93,8 +104,8 @@ def export_tflite(model, X_train, labels):
 def main():
     parser = argparse.ArgumentParser(description='Train plant disease classifier (healthy/powdery/rust) and export TFLite.')
     parser.add_argument('--data', required=True, help='Path to dataset directory with subfolders healthy/, powdery/, rust/')
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--fine_tune_epochs', type=int, default=5)
+    parser.add_argument('--epochs', type=int, default=5) # Reduced for shortcut
+    parser.add_argument('--fine_tune_epochs', type=int, default=3) # Reduced for shortcut
     args = parser.parse_args()
 
     X, y, classes = load_dataset(args.data, image_size=MODEL_INPUT_SIZE)

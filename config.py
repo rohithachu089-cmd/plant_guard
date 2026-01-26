@@ -5,6 +5,7 @@
 ESP_BASE_URL = "http://192.168.1.50"  # change to your ESP IP or mDNS name
 ESP_STATUS_PATH = "/status"          # GET returns JSON {"water_level": 0-100, "pump1_count": int, "pump2_count": int}
 ESP_SPRAY_PATH = "/spray"            # GET/POST with param pump=1|2 triggers pump
+ESP_MOVE_PATH = "/move"              # GET/POST with param cmd=start|stop
 ESP_TIMEOUT_SEC = 3
 
 # === Model & Inference ===
@@ -18,6 +19,8 @@ PREDICTION_SMOOTHING = 5       # number of recent predictions to smooth
 PREDICTION_THRESHOLD = 0.78    # min probability to accept decision
 INFERENCE_FPS = 3              # run N inferences per second
 AUTO_SPRAY_COOLDOWN_SEC = 30   # per-class cooldown to avoid repeated sprays
+SCAN_INTERVAL_SEC = 3          # move for N seconds
+SCAN_DURATION_SEC = 3          # stop and scan for N seconds
 
 # === Camera ===
 CAMERA_FPS = 10

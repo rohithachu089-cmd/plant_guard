@@ -14,6 +14,7 @@ from config import (
     ESP_BASE_URL,
     ESP_STATUS_PATH,
     ESP_SPRAY_PATH,
+    ESP_MOVE_PATH,
     ESP_TIMEOUT_SEC,
     MODEL_INPUT_SIZE,
     TFLITE_MODEL_PATH,
@@ -22,6 +23,8 @@ from config import (
     PREDICTION_THRESHOLD,
     INFERENCE_FPS,
     AUTO_SPRAY_COOLDOWN_SEC,
+    SCAN_INTERVAL_SEC,
+    SCAN_DURATION_SEC,
     CAMERA_FPS,
     CAMERA_RESOLUTION,
     APP_HOST,
@@ -38,6 +41,8 @@ app = Flask(__name__)
 # Shared state
 state_lock = threading.Lock()
 auto_enabled = AUTO_ENABLED_DEFAULT
+scan_active = False # New state for automated routine
+bot_phase = "stopped" # "moving" or "scanning" or "stopped"
 last_spray_time = {"powdery": 0, "rust": 0}
 spray_counts_local = {"pump1": 0, "pump2": 0}
 last_prediction = {"label": "", "probs": {}, "timestamp": 0}
@@ -104,6 +109,41 @@ def trigger_spray(pump: int):
         spray_counts_local[key] += 1
 
 
+def trigger_move(cmd: str):
+    assert cmd in ("start", "stop")
+    url = f"{ESP_BASE_URL}{ESP_MOVE_PATH}"
+    try:
+        r = requests.get(url, params={"cmd": cmd}, timeout=ESP_TIMEOUT_SEC)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"Error triggering move {cmd}: {e}")
+
+def sequencer_loop():
+    global bot_phase
+    while True:
+        with state_lock:
+            active = scan_active
+        if not active:
+            with state_lock:
+                if bot_phase != "stopped":
+                    trigger_move("stop")
+                    bot_phase = "stopped"
+            time.sleep(1)
+            continue
+        
+        # Move phase
+        with state_lock:
+            bot_phase = "moving"
+        trigger_move("start")
+        time.sleep(SCAN_INTERVAL_SEC)
+        
+        # Stop & Scan phase
+        with state_lock:
+            bot_phase = "scanning"
+        trigger_move("stop")
+        time.sleep(SCAN_DURATION_SEC)
+
+
 def mjpeg_generator():
     while True:
         frame = frame_queue.get()
@@ -161,10 +201,13 @@ def inference_loop():
                 pass
         frame_queue.put(overlay_frame)
 
-        # Auto spray logic
+        # Auto spray logic (only when scanning or manually auto-enabled)
         with state_lock:
             do_auto = auto_enabled
-        if do_auto and best_prob >= PREDICTION_THRESHOLD:
+            current_phase = bot_phase
+            is_scanning = (current_phase == "scanning") or (not scan_active) # allow auto if routine is off
+        
+        if do_auto and is_scanning and best_prob >= PREDICTION_THRESHOLD:
             now = time.time()
             if best_label == "powdery" and now - last_spray_time["powdery"] >= AUTO_SPRAY_COOLDOWN_SEC:
                 trigger_spray(1)
@@ -204,7 +247,17 @@ def api_status():
         "pump2_count": status.get("pump2_count", counts["pump2"]),
         "last_prediction": lp,
         "auto_enabled": auto,
+        "scan_active": scan_active,
+        "bot_phase": bot_phase
     })
+
+@app.route('/api/toggle_scan', methods=['POST'])
+def api_toggle_scan():
+    global scan_active
+    with state_lock:
+        scan_active = not scan_active
+        val = scan_active
+    return jsonify({"scan_active": val})
 
 
 @app.route('/api/toggle_auto', methods=['POST'])
@@ -230,11 +283,13 @@ def api_spray():
 
 
 def main():
-    # Start camera and inference threads
+    # Start camera, inference and sequencer threads
     t_cam = threading.Thread(target=camera_loop, daemon=True)
     t_inf = threading.Thread(target=inference_loop, daemon=True)
+    t_seq = threading.Thread(target=sequencer_loop, daemon=True)
     t_cam.start()
     t_inf.start()
+    t_seq.start()
 
     app.run(host=APP_HOST, port=APP_PORT, debug=DEBUG, threaded=True)
 
